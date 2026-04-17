@@ -12,11 +12,11 @@ primary_region = "fra"  # pick closest to you: fra, iad, lhr, sjc, syd, nrt…
   PORT      = "8080"
 
 # Persistent disk for submissions.csv + uploaded datasets.
-# Create it once before first deploy:
-#   fly volumes create hv_data --size 1 --region fra
-[mounts]
-  source      = "hv_data"
-  destination = "/data"
+# To enable: run `fly volumes create hv_data --size 1 --region <same>`
+# then uncomment the block below and redeploy.
+# [mounts]
+#   source      = "hv_data"
+#   destination = "/data"
 
 [http_service]
   internal_port     = 8080
