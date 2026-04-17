@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Giza Artifact Discovery — DBSCAN Predictor</title>
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <div class="logo">𓋹</div>
+      <div>
+        <h1>The Hidden Variable</h1>
+        <p class="subtitle">DBSCAN + KDE predictor for new artifact discovery — Giza plateau</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="cv-pill" id="cv-pill" title="Cross-validated recall — click to re-run">
+        <span class="cv-label">CV</span>
+        <span class="cv-value" id="cv-value">—</span>
+      </div>
+      <div class="model-toggle" id="model-toggle" title="Switch clustering algorithm — refits everything">
+        <button class="mt-opt active" data-model="dbscan" type="button">DBSCAN</button>
+        <button class="mt-opt" data-model="hdbscan" type="button">HDBSCAN</button>
+      </div>
+      <div class="export-menu">
+        <button class="export-btn" id="export-toggle" type="button" title="Download data">⤓ Export</button>
+        <div class="export-dropdown" id="export-dropdown" hidden>
+          <a href="/api/export/predictions" download>Predictions</a>
+          <a href="/api/export/clusters" download>Clusters</a>
+          <a href="/api/export/assignments" download>Point assignments</a>
+          <a href="/api/export/submissions" download>Submissions</a>
+        </div>
+      </div>
+      <div id="stats" class="stats"></div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="map-tab">Discovery Map</button>
+    <button class="tab" data-tab="records-tab">Records Browser</button>
+    <button class="tab" data-tab="tune-tab">Hyperparameter Tuning</button>
+    <button class="tab" data-tab="forecast-tab">Cluster Forecasting</button>
+    <button class="tab" data-tab="add-tab">Add / Classify Coordinates</button>
+  </nav>
+
+  <main>
+    <!-- ============== TAB 1: MAP ============== -->
+    <section id="map-tab" class="tab-panel active">
+      <div class="filter-bar">
+        <label>Category
+          <select id="filter-category"><option value="">All</option></select>
+        </label>
+        <label>Era window
+          <input id="filter-early" type="number" step="10" placeholder="early" />
+          <span>→</span>
+          <input id="filter-late" type="number" step="10" placeholder="late" />
+        </label>
+        <label class="chk">
+          <input id="filter-include-subs" type="checkbox" /> Include submissions
+        </label>
+        <button type="button" id="btn-apply-filter">Apply filter</button>
+        <button type="button" id="btn-clear-filter" class="ghost">Clear</button>
+        <span id="filter-status" class="muted"></span>
+      </div>
+      <div class="map-wrap">
+        <div id="map"></div>
+
+        <div id="sim-panel" class="sim-panel">
+          <div class="sim-head">
+            <span class="drone-glyph">🛸</span>
+            <span>GPR Drone Survey Simulation</span>
+            <button id="sim-collapse" class="sim-collapse" type="button" title="Collapse">▾</button>
+          </div>
+          <div class="sim-body">
+            <div class="sim-inputs">
+              <label>Speed (m/s)
+                <input id="sim-speed" type="number" value="5" min="0.5" max="30" step="0.5" />
+              </label>
+              <label>Scan / site (s)
+                <input id="sim-scan" type="number" value="30" min="1" max="900" step="1" />
+              </label>
+              <label>Sim speed-up ×
+                <input id="sim-mult" type="number" value="30" min="1" max="500" step="1" />
+              </label>
+              <label class="chk">
+                <input id="sim-return" type="checkbox" checked /> Return to base
+              </label>
+            </div>
+            <div class="sim-actions">
+              <button id="btn-plan" type="button">Plan route</button>
+              <button id="btn-start" type="button" class="primary">▶ Start simulation</button>
+              <button id="btn-pause" type="button" disabled>❚❚ Pause</button>
+              <button id="btn-reset" type="button">⟲ Reset</button>
+            </div>
+            <div class="sim-stats" id="sim-stats">
+              <div><span class="lbl">Stops</span><span id="s-stops">—</span></div>
+              <div><span class="lbl">Total distance</span><span id="s-dist">—</span></div>
+              <div><span class="lbl">Flight time</span><span id="s-fly">—</span></div>
+              <div><span class="lbl">Scan time</span><span id="s-scan">—</span></div>
+              <div class="total"><span class="lbl">Total mission</span><span id="s-total">—</span></div>
+              <div><span class="lbl">Status</span><span id="s-status">idle</span></div>
+              <div><span class="lbl">Elapsed (sim)</span><span id="s-elapsed">—</span></div>
+              <div><span class="lbl">ETA</span><span id="s-eta">—</span></div>
+            </div>
+            <div class="sim-progress"><div id="sim-prog-bar"></div></div>
+          </div>
+        </div>
+
+        <div id="legend" class="legend">
+          <h3>Legend</h3>
+          <ul>
+            <li><span class="swatch known"></span> Known artifact</li>
+            <li><span class="swatch pred"></span> Predicted discovery site</li>
+            <li><span class="swatch cluster-sample"></span> DBSCAN cluster region</li>
+            <li><span class="swatch forecast"></span> Forecasted new cluster</li>
+          </ul>
+          <h3>Layers</h3>
+          <label><input type="checkbox" id="toggle-known" checked> Known artifacts</label>
+          <label><input type="checkbox" id="toggle-hulls" checked> Cluster segmentation</label>
+          <label><input type="checkbox" id="toggle-preds" checked> Predicted sites</label>
+          <label><input type="checkbox" id="toggle-forecast" checked> Forecasted new clusters</label>
+          <label><input type="checkbox" id="toggle-heatmap"> KDE density heatmap</label>
+          <h3>Clusters</h3>
+          <div id="cluster-list" class="cluster-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== TAB 2: RECORDS BROWSER ============== -->
+    <section id="records-tab" class="tab-panel">
+      <div class="records-wrap">
+        <div class="records-toolbar">
+          <input type="search" id="records-search"
+                 placeholder="Search label, category, context, cluster id…" />
+          <select id="records-cluster-filter">
+            <option value="">All clusters</option>
+          </select>
+          <span id="records-count" class="muted"></span>
+          <div class="pager">
+            <button id="pg-prev" type="button">‹ Prev</button>
+            <span id="pg-info" class="muted">1 / 1</span>
+            <button id="pg-next" type="button">Next ›</button>
+          </div>
+        </div>
+        <div class="records-table-wrap">
+          <table id="records-table">
+            <thead>
+              <tr>
+                <th data-sort="idx">#</th>
+                <th>Thumb</th>
+                <th data-sort="label">Label</th>
+                <th data-sort="category">Category</th>
+                <th data-sort="cluster">Cluster</th>
+                <th data-sort="probability" title="HDBSCAN soft membership">Prob.</th>
+                <th data-sort="context_path">Context</th>
+                <th data-sort="early">Early</th>
+                <th data-sort="late">Late</th>
+                <th data-sort="lat">Latitude</th>
+                <th data-sort="lon">Longitude</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== TAB 3: HYPERPARAMETER TUNING ============== -->
+    <section id="tune-tab" class="tab-panel">
+      <div class="tune-wrap">
+        <div class="card">
+          <h2>Apply specific hyperparameters</h2>
+          <p class="muted">
+            Re-fit DBSCAN with the chosen <b>ε</b> (neighborhood radius, metres) and
+            <b>min_samples</b> (minimum neighbours). The map, records table, and
+            predictions all refresh with the new clustering.
+          </p>
+          <div class="tune-current" id="tune-current">Current: —</div>
+          <form id="tune-form">
+            <label>
+              ε (metres) <span id="eps-val" class="range-val">5</span>
+              <input type="range" id="eps-input" name="eps_m"
+                     min="1" max="30" step="0.5" value="5" />
+            </label>
+            <label>
+              min_samples <span id="ms-val" class="range-val">5</span>
+              <input type="range" id="ms-input" name="min_samples"
+                     min="2" max="30" step="1" value="5" />
+            </label>
+            <div class="actions">
+              <button type="submit" id="btn-apply">Apply &amp; re-cluster</button>
+              <span id="apply-status" class="muted"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>Grid search across hyperparameters</h2>
+          <p class="muted">
+            Sweeps combinations of ε and min_samples, reporting number of clusters,
+            noise, mean/largest cluster size, and <b>silhouette score</b> (higher =
+            better-separated). Click a row to apply those values.
+          </p>
+          <div class="sweep-ranges">
+            <label>ε range (m)
+              <input id="sw-eps-min" type="number" min="0.5" step="0.5" value="2" />
+              <span>to</span>
+              <input id="sw-eps-max" type="number" min="0.5" step="0.5" value="15" />
+              <span>step</span>
+              <input id="sw-eps-step" type="number" min="0.1" step="0.1" value="1" />
+            </label>
+            <label>min_samples range
+              <input id="sw-ms-min" type="number" min="2" step="1" value="3" />
+              <span>to</span>
+              <input id="sw-ms-max" type="number" min="2" step="1" value="12" />
+              <span>step</span>
+              <input id="sw-ms-step" type="number" min="1" step="1" value="1" />
+            </label>
+            <div class="actions">
+              <button type="button" id="btn-sweep">Run grid search</button>
+              <span id="sweep-status" class="muted"></span>
+            </div>
+          </div>
+
+          <div class="sweep-results-wrap">
+            <table id="sweep-table">
+              <thead>
+                <tr>
+                  <th data-sort="eps_m">ε (m)</th>
+                  <th data-sort="min_samples">min_samples</th>
+                  <th data-sort="n_clusters">Clusters</th>
+                  <th data-sort="noise">Noise</th>
+                  <th data-sort="noise_pct">Noise %</th>
+                  <th data-sort="silhouette">Silhouette ↑</th>
+                  <th data-sort="mean_cluster_size">Mean size</th>
+                  <th data-sort="largest_cluster">Largest</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="muted tiny">
+            Silhouette is computed on non-noise points (sampled to 1500 max)
+            using haversine distance. Higher is better; range [-1, 1].
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== TAB: CLUSTER FORECASTING ============== -->
+    <section id="forecast-tab" class="tab-panel">
+      <div class="tune-wrap">
+        <div class="card">
+          <h2>Forecast new cluster locations</h2>
+          <p class="muted">
+            Fits a <b>weighted Gaussian KDE</b> over existing DBSCAN cluster
+            centroids (weights = log(cluster size)), evaluates density on an
+            expanded bounding box, and selects peaks that sit at least
+            <b>min_dist</b> metres away from any existing cluster. Non-max
+            suppression enforces spacing between picks. Results are drawn on the
+            Discovery Map as purple ★ markers (new layer).
+          </p>
+          <div class="sweep-ranges">
+            <label>Expansion ×
+              <input id="fc-expansion" type="number" min="1.1" max="15" step="0.1" value="3" />
+            </label>
+            <label>Top K
+              <input id="fc-topk" type="number" min="1" max="50" step="1" value="5" />
+            </label>
+            <label>Min distance (m)
+              <input id="fc-mindist" type="number" min="1" step="1" value="30" />
+            </label>
+            <label>Bandwidth scale
+              <input id="fc-bw" type="number" min="0.1" max="5" step="0.1" value="1.2" />
+            </label>
+            <label>NMS spacing (m)
+              <input id="fc-nms" type="number" min="1" step="1" value="40" />
+            </label>
+            <div class="actions">
+              <button type="button" id="btn-forecast">Predict new clusters</button>
+              <button type="button" id="btn-bootstrap" class="ghost">Bootstrap uncertainty</button>
+              <span id="forecast-status" class="muted"></span>
+            </div>
+          </div>
+
+          <div class="sweep-results-wrap">
+            <table id="forecast-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
+                  <th>Score (norm.)</th>
+                  <th>Dist. to nearest (m)</th>
+                  <th>Nearest cluster</th>
+                  <th>Size hint</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="muted tiny">
+            Higher score_normalized = denser forecast peak. "Size hint" copies
+            the nearest existing cluster's count as a rough plausibility proxy.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== TAB 4: ADD / CLASSIFY ============== -->
+    <section id="add-tab" class="tab-panel">
+      <div class="form-wrap">
+        <div class="card">
+          <h2>Enter a new coordinate</h2>
+          <p class="muted">
+            Classify a point against the 31 DBSCAN clusters on the Giza plateau.
+            Optionally save the record with contextual info — it's persisted to
+            <code>submissions.csv</code>.
+          </p>
+          <form id="add-form">
+            <div class="row">
+              <label>
+                Latitude (WGS-84)
+                <input type="number" step="any" name="lat" required
+                       placeholder="e.g. 29.9753" />
+              </label>
+              <label>
+                Longitude (WGS-84)
+                <input type="number" step="any" name="lon" required
+                       placeholder="e.g. 31.1379" />
+              </label>
+            </div>
+            <label>
+              Item label
+              <input type="text" name="label" placeholder="e.g. Pottery sherd A-12" />
+            </label>
+            <div class="row">
+              <label>
+                Item category
+                <input type="text" name="category" list="categories"
+                       placeholder="e.g. Pottery, Drawing, Small Find" />
+                <datalist id="categories">
+                  <option value="Image media"></option>
+                  <option value="Pottery"></option>
+                  <option value="Drawing"></option>
+                  <option value="Small Find"></option>
+                  <option value="Architectural Element"></option>
+                </datalist>
+              </label>
+              <label>
+                Nearest cluster (auto)
+                <input type="text" id="auto-cluster" readonly
+                       placeholder="Classify to fill" />
+              </label>
+            </div>
+            <div class="row">
+              <label>
+                Early (BCE/CE)
+                <input type="number" step="1" name="early" placeholder="e.g. -2500" />
+              </label>
+              <label>
+                Late (BCE/CE)
+                <input type="number" step="1" name="late" placeholder="e.g. -2200" />
+              </label>
+            </div>
+            <label>
+              Notes / context
+              <textarea name="notes" rows="3"
+                        placeholder="Any contextual info the model can't derive from coords"></textarea>
+            </label>
+            <div class="actions">
+              <button type="button" id="btn-classify">Classify</button>
+              <button type="submit" id="btn-save">Classify &amp; Save</button>
+              <button type="button" id="btn-dummy" class="ghost">Fill dummy test</button>
+            </div>
+            <label class="chk tiny">
+              <input type="checkbox" id="chk-refit" /> Refit the model after saving (active learning)
+            </label>
+          </form>
+        </div>
+
+        <div class="card result-card">
+          <h2>Classification result</h2>
+          <div id="result-empty" class="muted">
+            Enter coordinates and click <b>Classify</b>.
+          </div>
+          <div id="result" hidden>
+            <div class="verdict" id="verdict"></div>
+            <dl class="result-grid">
+              <dt>Assigned cluster</dt><dd id="r-assigned">—</dd>
+              <dt>Nearest core cluster</dt><dd id="r-near-id">—</dd>
+              <dt>Distance to nearest core</dt><dd id="r-near-dist">—</dd>
+              <dt>Distance to nearest known artifact</dt><dd id="r-known-dist">—</dd>
+              <dt>KDE density score</dt><dd id="r-score">—</dd>
+              <dt>Percentile (vs. grid)</dt><dd id="r-pct">—</dd>
+              <dt>Top-20 threshold</dt><dd id="r-thresh">—</dd>
+            </dl>
+            <div id="mini-map" class="mini-map"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Data: Open Context · ARCE Sphinx Project 1979-1983 Archive</span>
+    <span>Model: DBSCAN (haversine, ε=5 m) + Gaussian KDE</span>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

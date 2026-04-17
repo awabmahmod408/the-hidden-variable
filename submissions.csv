@@ -1,0 +1,2 @@
+timestamp,label,lat,lon,category,early,late,notes,assigned_cluster,verdict,kde_score,kde_percentile
+2026-04-17T00:24:52+00:00,Test sherd,29.9752,31.1378,Pottery,-2500,-2200,demo entry,24,"PLAUSIBLE — near a cluster, below top-20 threshold",455944.1014962909,97.08
