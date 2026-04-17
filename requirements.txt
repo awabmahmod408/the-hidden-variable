@@ -5,3 +5,4 @@ scipy>=1.10
 folium>=0.15
 plotly>=5.18
 flask>=3.0
+gunicorn>=21.2

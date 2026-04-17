@@ -31,11 +31,18 @@ from predict_artifacts import (
 )
 import preprocess_dataset
 
+import os
+
 HERE = Path(__file__).parent
+# Writable data dir — defaults to project root locally; override with DATA_DIR
+# (e.g. /data on Fly.io with a mounted volume) so submissions + uploads persist.
+DATA_DIR = Path(os.getenv("DATA_DIR", HERE))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+(DATA_DIR / "other datasets").mkdir(parents=True, exist_ok=True)
 MODEL_PATH = HERE / "model_state.pkl"
 CSV_PATH = HERE / "open-context-2537-records.csv"
 PRED_CSV = HERE / "predicted_sites.csv"
-SUBMISSIONS_CSV = HERE / "submissions.csv"
+SUBMISSIONS_CSV = DATA_DIR / "submissions.csv"
 
 EARTH_R = 6_371_000.0
 
@@ -1048,7 +1055,15 @@ def api_datasets():
     """List local CSV datasets discoverable in the project root + `other datasets/`."""
     items = []
     current_path = str(CSV_PATH.resolve())
-    for p in [CSV_PATH, *sorted((HERE / "other datasets").glob("*.csv"))]:
+    bundled = sorted((HERE / "other datasets").glob("*.csv"))
+    uploaded = sorted((DATA_DIR / "other datasets").glob("*.csv"))
+    seen = set()
+    all_csvs = []
+    for p in [CSV_PATH, *bundled, *uploaded]:
+        rp = str(p.resolve())
+        if rp in seen: continue
+        seen.add(rp); all_csvs.append(p)
+    for p in all_csvs:
         if not p.exists():
             continue
         rp = str(p.resolve())
@@ -1077,10 +1092,10 @@ def api_load_dataset():
     target = Path(raw)
     if not target.is_absolute():
         target = (HERE / target).resolve()
-    try:
-        target.relative_to(HERE.resolve())
-    except ValueError:
-        return jsonify({"error": "Path outside project"}), 400
+    target = target.resolve()
+    allowed_roots = [HERE.resolve(), DATA_DIR.resolve()]
+    if not any(str(target).startswith(str(r)) for r in allowed_roots):
+        return jsonify({"error": "Path outside allowed roots"}), 400
     if not target.exists():
         return jsonify({"error": f"File not found: {target.name}"}), 404
     try:
@@ -1122,7 +1137,7 @@ def api_upload_dataset():
         return jsonify({"error": "No file uploaded"}), 400
     if not f.filename.lower().endswith(".csv"):
         return jsonify({"error": "Only .csv files accepted"}), 400
-    dest_dir = HERE / "other datasets"
+    dest_dir = DATA_DIR / "other datasets"
     dest_dir.mkdir(exist_ok=True)
     # Sanitize name: strip directory parts, collapse spaces.
     safe = Path(f.filename).name
@@ -1168,4 +1183,5 @@ _prime_state()
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host=os.getenv("HOST", "127.0.0.1"),
+            port=int(os.getenv("PORT", 5000)), debug=False)

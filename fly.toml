@@ -1,0 +1,39 @@
+# fly.toml — Fly.io configuration for The Hidden Variable
+# Fill in `app = "..."` after running `fly launch` (or set with `fly apps create`).
+
+app = "the-hidden-variable"
+primary_region = "fra"  # pick closest to you: fra, iad, lhr, sjc, syd, nrt…
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATA_DIR  = "/data"
+  PORT      = "8080"
+
+# Persistent disk for submissions.csv + uploaded datasets.
+# Create it once before first deploy:
+#   fly volumes create hv_data --size 1 --region fra
+[mounts]
+  source      = "hv_data"
+  destination = "/data"
+
+[http_service]
+  internal_port     = 8080
+  force_https       = true
+  auto_stop_machines  = "stop"
+  auto_start_machines = true
+  min_machines_running = 0       # set to 1 to avoid cold starts
+  processes            = ["app"]
+
+  [[http_service.checks]]
+    interval     = "30s"
+    timeout      = "5s"
+    grace_period = "30s"
+    method       = "GET"
+    path         = "/api/current_params"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus     = 1
+  memory   = "1gb"   # 512mb works for Giza; 1gb needed for the 7k-row dataset
