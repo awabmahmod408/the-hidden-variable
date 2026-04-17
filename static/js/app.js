@@ -1500,6 +1500,101 @@ function wireExportMenu() {
   document.addEventListener("click", () => { dd.hidden = true; });
 }
 
+// ---------- dataset switcher ----------
+async function wireDatasetMenu() {
+  const btn = document.getElementById("dataset-toggle");
+  const dd = document.getElementById("dataset-dropdown");
+  const list = document.getElementById("dataset-list");
+  if (!btn || !dd || !list) return;
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const show = dd.hidden;
+    dd.hidden = !dd.hidden;
+    if (show) await populateDatasetList(list);
+  });
+  document.addEventListener("click", () => { dd.hidden = true; });
+  dd.addEventListener("click", (e) => e.stopPropagation());
+  const fileInput = document.getElementById("dataset-file");
+  fileInput?.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    await uploadDataset(f);
+    e.target.value = "";
+  });
+}
+
+async function uploadDataset(file) {
+  const btn = document.getElementById("dataset-toggle");
+  const prev = btn.textContent;
+  btn.textContent = `Uploading ${file.name}…`;
+  btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload_dataset", { method: "POST", body: fd });
+    const j = await res.json();
+    if (!res.ok || j.error) { alert(j.error || "Upload failed"); return; }
+    await reloadData();
+    runCV();
+  } catch (e) {
+    alert("Upload failed: " + e);
+  } finally {
+    btn.textContent = prev;
+    btn.disabled = false;
+    document.getElementById("dataset-dropdown").hidden = true;
+  }
+}
+
+async function populateDatasetList(list) {
+  list.innerHTML = '<span class="muted">Loading…</span>';
+  try {
+    const res = await fetch("/api/datasets");
+    const j = await res.json();
+    list.innerHTML = "";
+    (j.datasets || []).forEach((d) => {
+      const a = document.createElement("a");
+      a.href = "#";
+      a.className = "ds-item" + (d.active ? " active" : "");
+      const rows = d.rows != null ? `${d.rows.toLocaleString()} rows` : "";
+      a.innerHTML = `<span class="ds-name">${d.name}</span><span class="ds-rows muted">${rows}${d.active ? " · active" : ""}</span>`;
+      a.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        if (d.active) return;
+        await loadDataset(d.path, d.name);
+      });
+      list.appendChild(a);
+    });
+    const ext = document.getElementById("dataset-external");
+    if (ext && j.opencontext_url) ext.href = j.opencontext_url;
+  } catch {
+    list.innerHTML = '<span class="muted">Failed to load</span>';
+  }
+}
+
+async function loadDataset(path, name) {
+  const btn = document.getElementById("dataset-toggle");
+  const prev = btn.textContent;
+  btn.textContent = `Loading ${name}…`;
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/load_dataset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const j = await res.json();
+    if (!res.ok || j.error) { alert(j.error || "Load failed"); return; }
+    await reloadData();
+    runCV();
+  } catch (e) {
+    alert("Load failed: " + e);
+  } finally {
+    btn.textContent = prev;
+    btn.disabled = false;
+    document.getElementById("dataset-dropdown").hidden = true;
+  }
+}
+
 // ---------- CV recall pill ----------
 async function runCV() {
   const pill = document.getElementById("cv-pill");
@@ -1673,6 +1768,7 @@ async function boot() {
   wireFilterBar();
   wireHeatmapToggle();
   wireExportMenu();
+  wireDatasetMenu();
   wireCVPill();
   document.getElementById("btn-bootstrap")?.addEventListener("click", runBootstrap);
   runCV();

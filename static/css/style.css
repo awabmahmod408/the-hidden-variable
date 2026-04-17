@@ -146,6 +146,34 @@ body {
   font-size: 0.82rem;
 }
 .export-dropdown a:hover { background: #1e2a38; color: var(--accent); }
+.ds-section-label {
+  padding: 0.4rem 0.9rem 0.2rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ds-item {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+.ds-item.active { background: #1a2430; color: var(--accent); cursor: default; }
+.ds-item .ds-name { font-weight: 500; }
+.ds-item .ds-rows { font-size: 0.72rem; }
+.ds-divider { height: 1px; background: var(--border); margin: 0.3rem 0; }
+#dataset-dropdown { min-width: 260px; }
+#dataset-toggle:disabled { opacity: 0.6; cursor: wait; }
+.ds-upload {
+  display: block;
+  padding: 0.5rem 0.9rem;
+  color: var(--accent);
+  font-size: 0.82rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.ds-upload:hover { background: #1e2a38; }
 
 /* Filter bar */
 .filter-bar {

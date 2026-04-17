@@ -46,7 +46,7 @@ GRID_RESOLUTION = 300
 MIN_DISTANCE_M = 2
 MAX_CLUSTER_DISTANCE_M = 15
 NMS_SPACING_M = 3
-TOP_N = 20
+TOP_N = 100
 KDE_BW_SCALE = 0.6  # <1 sharpens the KDE
 
 CLUSTER_COLORS = [
@@ -214,7 +214,7 @@ def build_map(df: pd.DataFrame, labels: np.ndarray, preds: pd.DataFrame) -> foli
 
     known_fg = folium.FeatureGroup(name="Known artifacts", show=True)
     clusters_fg = folium.FeatureGroup(name="DBSCAN clusters", show=False)
-    pred_fg = folium.FeatureGroup(name="Predicted sites (top 20)", show=True)
+    pred_fg = folium.FeatureGroup(name=f"Predicted sites (top {TOP_N})", show=True)
 
     for _, row in df.iterrows():
         popup = f"<b>{row['label']}</b><br>{row.get('category','')}"

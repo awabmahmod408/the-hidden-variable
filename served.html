@@ -8,7 +8,7 @@
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
         crossorigin="" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <link rel="stylesheet" href="/static/css/style.css" />
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" defer></script>
 </head>
 <body>
@@ -28,19 +28,6 @@
       <div class="model-toggle" id="model-toggle" title="Switch clustering algorithm — refits everything">
         <button class="mt-opt active" data-model="dbscan" type="button">DBSCAN</button>
         <button class="mt-opt" data-model="hdbscan" type="button">HDBSCAN</button>
-      </div>
-      <div class="export-menu">
-        <button class="export-btn" id="dataset-toggle" type="button" title="Swap dataset">↻ Try a different dataset</button>
-        <div class="export-dropdown" id="dataset-dropdown" hidden>
-          <div class="ds-section-label">Local datasets</div>
-          <div id="dataset-list"><span class="muted">Loading…</span></div>
-          <div class="ds-divider"></div>
-          <label class="ds-upload" for="dataset-file">
-            ⬆ Upload CSV
-            <input type="file" id="dataset-file" accept=".csv" hidden />
-          </label>
-          <a id="dataset-external" href="https://opencontext.org/query/" target="_blank" rel="noopener">Browse Open Context ↗</a>
-        </div>
       </div>
       <div class="export-menu">
         <button class="export-btn" id="export-toggle" type="button" title="Download data">⤓ Export</button>
@@ -416,7 +403,7 @@
               <dt>Distance to nearest known artifact</dt><dd id="r-known-dist">—</dd>
               <dt>KDE density score</dt><dd id="r-score">—</dd>
               <dt>Percentile (vs. grid)</dt><dd id="r-pct">—</dd>
-              <dt>Top-N threshold</dt><dd id="r-thresh">—</dd>
+              <dt>Top-20 threshold</dt><dd id="r-thresh">—</dd>
             </dl>
             <div id="mini-map" class="mini-map"></div>
           </div>
@@ -433,6 +420,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
           crossorigin=""></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -390,7 +390,7 @@ def classify(lat: float, lon: float) -> dict:
         verdict = "HIGH-POTENTIAL DISCOVERY ZONE"
         verdict_class = "high"
     elif nearest_cluster_m <= max_cd:
-        verdict = "PLAUSIBLE — near a cluster, below top-20 threshold"
+        verdict = "PLAUSIBLE — near a cluster, below top-N threshold"
         verdict_class = "plausible"
     else:
         verdict = "LOW-POTENTIAL / OUTSIDE SURVEYED AREA"
@@ -1041,6 +1041,127 @@ def api_export(which):
             return _csv_response(pd.read_csv(SUBMISSIONS_CSV), "submissions.csv")
         return _csv_response(pd.DataFrame(), "submissions.csv")
     return jsonify({"error": "Unknown export"}), 400
+
+
+@app.route("/api/datasets")
+def api_datasets():
+    """List local CSV datasets discoverable in the project root + `other datasets/`."""
+    items = []
+    current_path = str(CSV_PATH.resolve())
+    for p in [CSV_PATH, *sorted((HERE / "other datasets").glob("*.csv"))]:
+        if not p.exists():
+            continue
+        rp = str(p.resolve())
+        try:
+            n_rows = sum(1 for _ in open(p, encoding="utf-8-sig")) - 1
+        except Exception:
+            n_rows = None
+        items.append({
+            "path": rp,
+            "name": p.name,
+            "rows": n_rows,
+            "active": (rp == current_path),
+        })
+    return jsonify({"datasets": items,
+                    "opencontext_url": "https://opencontext.org/query/"})
+
+
+@app.route("/api/load_dataset", methods=["POST"])
+def api_load_dataset():
+    """Swap the active dataset: load, clean, refit the current model."""
+    global RECORDS, ACTIVE_RECORDS, FILTER_META, CSV_PATH
+    p = request.get_json(force=True) or {}
+    raw = (p.get("path") or "").strip()
+    if not raw:
+        return jsonify({"error": "No path"}), 400
+    target = Path(raw)
+    if not target.is_absolute():
+        target = (HERE / target).resolve()
+    try:
+        target.relative_to(HERE.resolve())
+    except ValueError:
+        return jsonify({"error": "Path outside project"}), 400
+    if not target.exists():
+        return jsonify({"error": f"File not found: {target.name}"}), 404
+    try:
+        df = preprocess_dataset.load_and_clean(target)
+    except Exception as e:
+        return jsonify({"error": f"Preprocess failed: {e}"}), 400
+    for c in ["label", "category", "early", "late", "uri", "citation_uri",
+              "project", "project_uri", "context_path", "context_uri",
+              "icon", "thumbnail", "published", "updated"]:
+        if c not in df.columns:
+            df[c] = ""
+    RECORDS = df.reset_index(drop=True)
+    ACTIVE_RECORDS = RECORDS
+    CSV_PATH = target
+    FILTER_META = {"category": None, "early_min": None, "late_max": None,
+                   "include_submissions": False, "n_records": len(RECORDS)}
+    model = STATE.get("model", "dbscan")
+    kwargs = dict(min_samples=int(STATE.get("min_samples") or 5))
+    if model == "hdbscan":
+        kwargs["min_cluster_size"] = int(STATE.get("min_cluster_size") or 5)
+    else:
+        kwargs["eps_m"] = float(STATE.get("eps_m") or 5)
+    metrics = fit_and_set(model=model, **kwargs)
+    return jsonify({
+        "loaded": True,
+        "path": str(target),
+        "name": target.name,
+        "summary": preprocess_dataset.summary(RECORDS),
+        "metrics": metrics,
+    })
+
+
+@app.route("/api/upload_dataset", methods=["POST"])
+def api_upload_dataset():
+    """Accept a user-uploaded CSV, save into `other datasets/`, load it."""
+    global RECORDS, ACTIVE_RECORDS, FILTER_META, CSV_PATH
+    f = request.files.get("file")
+    if f is None or not f.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    if not f.filename.lower().endswith(".csv"):
+        return jsonify({"error": "Only .csv files accepted"}), 400
+    dest_dir = HERE / "other datasets"
+    dest_dir.mkdir(exist_ok=True)
+    # Sanitize name: strip directory parts, collapse spaces.
+    safe = Path(f.filename).name
+    dest = dest_dir / safe
+    i = 1
+    while dest.exists():
+        dest = dest_dir / f"{Path(safe).stem}_{i}{Path(safe).suffix}"
+        i += 1
+    f.save(dest)
+    try:
+        df = preprocess_dataset.load_and_clean(dest)
+    except Exception as e:
+        try: dest.unlink()
+        except Exception: pass
+        return jsonify({"error": f"Preprocess failed: {e}"}), 400
+    for c in ["label", "category", "early", "late", "uri", "citation_uri",
+              "project", "project_uri", "context_path", "context_uri",
+              "icon", "thumbnail", "published", "updated"]:
+        if c not in df.columns:
+            df[c] = ""
+    RECORDS = df.reset_index(drop=True)
+    ACTIVE_RECORDS = RECORDS
+    CSV_PATH = dest
+    FILTER_META = {"category": None, "early_min": None, "late_max": None,
+                   "include_submissions": False, "n_records": len(RECORDS)}
+    model = STATE.get("model", "dbscan")
+    kwargs = dict(min_samples=int(STATE.get("min_samples") or 5))
+    if model == "hdbscan":
+        kwargs["min_cluster_size"] = int(STATE.get("min_cluster_size") or 5)
+    else:
+        kwargs["eps_m"] = float(STATE.get("eps_m") or 5)
+    metrics = fit_and_set(model=model, **kwargs)
+    return jsonify({
+        "uploaded": True,
+        "path": str(dest),
+        "name": dest.name,
+        "summary": preprocess_dataset.summary(RECORDS),
+        "metrics": metrics,
+    })
 
 
 _prime_state()
