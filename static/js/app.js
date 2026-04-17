@@ -843,10 +843,17 @@ async function applyParams(eps_m, min_samples) {
   refreshCurrentParams();
 }
 
-async function reloadData() {
+async function reloadData(opts = {}) {
   const res = await fetch("/api/data");
   const data = await res.json();
   state.data = data;
+  if (opts.recenter && state.map && data.records?.length) {
+    const lats = data.records.map(r => r.lat);
+    const lons = data.records.map(r => r.lon);
+    const bounds = [[Math.min(...lats), Math.min(...lons)],
+                    [Math.max(...lats), Math.max(...lons)]];
+    state.map.flyToBounds(bounds, { padding: [40, 40], duration: 1.2, maxZoom: 19 });
+  }
   syncModelToggle(data);
   renderStats(data);
   drawKnown(data);
@@ -1534,8 +1541,8 @@ async function uploadDataset(file) {
     const res = await fetch("/api/upload_dataset", { method: "POST", body: fd });
     const j = await res.json();
     if (!res.ok || j.error) { alert(j.error || "Upload failed"); return; }
-    await reloadData();
-    runCV();
+    await reloadData({ recenter: true });
+    setTimeout(runCV, 50);
   } catch (e) {
     alert("Upload failed: " + e);
   } finally {
@@ -1584,8 +1591,8 @@ async function loadDataset(path, name) {
     });
     const j = await res.json();
     if (!res.ok || j.error) { alert(j.error || "Load failed"); return; }
-    await reloadData();
-    runCV();
+    await reloadData({ recenter: true });
+    setTimeout(runCV, 50);
   } catch (e) {
     alert("Load failed: " + e);
   } finally {

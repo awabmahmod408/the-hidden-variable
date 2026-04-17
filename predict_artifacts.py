@@ -94,8 +94,15 @@ def kde_on_grid(cluster_pts: np.ndarray):
     lon_min, lon_max = cluster_pts[:, 1].min(), cluster_pts[:, 1].max()
     lat_pad = (lat_max - lat_min) * 0.2 or 1e-4
     lon_pad = (lon_max - lon_min) * 0.2 or 1e-4
-    lat_lin = np.linspace(lat_min - lat_pad, lat_max + lat_pad, GRID_RESOLUTION)
-    lon_lin = np.linspace(lon_min - lon_pad, lon_max + lon_pad, GRID_RESOLUTION)
+    # Adaptive grid: shrink resolution as cluster point count grows so KDE
+    # evaluation stays responsive (cost scales O(n_pts × n_cells)).
+    n = len(cluster_pts)
+    if   n <= 1500: res = GRID_RESOLUTION
+    elif n <= 3500: res = 220
+    elif n <= 6000: res = 170
+    else:           res = 130
+    lat_lin = np.linspace(lat_min - lat_pad, lat_max + lat_pad, res)
+    lon_lin = np.linspace(lon_min - lon_pad, lon_max + lon_pad, res)
     lon_grid, lat_grid = np.meshgrid(lon_lin, lat_lin)
 
     kde = gaussian_kde(cluster_pts.T, bw_method="scott")
