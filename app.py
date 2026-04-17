@@ -29,6 +29,7 @@ from predict_artifacts import (
     kde_on_grid,
     pick_candidates,
 )
+import preprocess_dataset
 
 HERE = Path(__file__).parent
 MODEL_PATH = HERE / "model_state.pkl"
