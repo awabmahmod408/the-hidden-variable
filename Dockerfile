@@ -22,15 +22,17 @@ COPY . .
 # grids anyway. Just make the data volume target exists.
 RUN mkdir -p /data && mkdir -p "/data/other datasets"
 
+# Host sets $PORT (Fly: 8080, HF Spaces: 7860, Render: 10000, Railway: random).
+# Default to 8080 for `docker run` without -e PORT.
+ENV PORT=8080
 EXPOSE 8080
 
-# 1 worker — STATE is process-local module globals. Scale horizontally with
-# stickiness or refactor state into a shared store before increasing workers.
-# 120 s timeout covers a worst-case 7k-row refit; `--preload` means RECORDS +
-# STATE are built once and copied-on-write into the worker.
-CMD ["gunicorn", "app:app", \
-     "--bind", "0.0.0.0:8080", \
-     "--workers", "1", \
-     "--threads", "4", \
-     "--timeout", "120", \
-     "--preload"]
+# Shell form so $PORT is expanded at runtime. 1 worker — STATE is process-local
+# module globals. 120 s timeout covers a worst-case 7k-row refit; `--preload`
+# means RECORDS + STATE are built once and copied-on-write into the worker.
+CMD gunicorn app:app \
+    --bind "0.0.0.0:${PORT}" \
+    --workers 1 \
+    --threads 4 \
+    --timeout 120 \
+    --preload

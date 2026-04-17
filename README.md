@@ -1,3 +1,13 @@
+---
+title: The Hidden Variable
+emoji: 🏺
+colorFrom: yellow
+colorTo: red
+sdk: docker
+app_port: 8080
+pinned: false
+---
+
 # The Hidden Variable
 
 An interactive archaeology-prediction web app. Given a CSV of known artifact coordinates (Open Context export format), it clusters the sites with **DBSCAN** or **HDBSCAN**, fits a **weighted Gaussian KDE** to the clusters, and surfaces the **top-100 locations** where new artifacts are most likely to be found. Includes a GPR drone-survey simulation, cluster-growth forecasting with bootstrap uncertainty, active learning from user submissions, and dataset hot-swap.
